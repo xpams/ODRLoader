@@ -7,10 +7,13 @@
 //
 
 #import "ODRLoader.h"
-#import "cocos2d.h"
+
+#import <iostream>
+
+#import "NSTimer+Blocks.h"
 
 
-void * ODRLoader::loadWithTag(std::vector<std::string> tags) {
+void ODRLoader::loadWithTags(std::vector<std::string> tags, ODRLoaderDelegate * delegate) {
     NSMutableSet * sTags = [[NSMutableSet alloc] init];
     
     for (auto tag : tags) {
@@ -18,56 +21,51 @@ void * ODRLoader::loadWithTag(std::vector<std::string> tags) {
     }
     
     auto request = [[NSBundleResourceRequest alloc] initWithTags:sTags];
-
+    
     [request conditionallyBeginAccessingResourcesWithCompletionHandler:^
      (BOOL resourcesAvailable) {
          if (resourcesAvailable) {
-             std::vector<std::string> tags;
-             for (NSString * tag : [request tags]) {
-                 tags.push_back(std::string([tag UTF8String]));
-             }
-             
-             ODRNotificationBody * odrNotificationBody = new ODRNotificationBody(true, tags);
-             
-             cocos2d::EventCustom event(ODR_NOTIFICATION);
-             event.setUserData(odrNotificationBody);
-             cocos2d::Director::getInstance()->getEventDispatcher()->dispatchEvent(&event);
-             
+             ODRLoader::odrLoadingCompleted(request, ODR_ALREADY_DOWNLOADED, delegate);
          } else {
-             [request beginAccessingResourcesWithCompletionHandler:^
-              (NSError * _Nullable error) {
-                  if (error == nil) {
-                      std::vector<std::string> tags;
-                      for (NSString * tag : [request tags]) {
-                          tags.push_back(std::string([tag UTF8String]));
+             dispatch_async(dispatch_get_main_queue(), ^{
+                 NSTimer * timer = [NSTimer scheduledTimerWithTimeInterval:0.04 block:^{
+                     if (delegate != nullptr) {
+                         delegate->odrLoadingStatus(tags, [request progress].fractionCompleted);
+                     }
+                     
+                 } repeats:YES];
+                 
+                 
+                 [request beginAccessingResourcesWithCompletionHandler:^
+                  (NSError * _Nullable error) {
+                      if (error == nil) {
+                          ODRLoader::odrLoadingCompleted(request, ODR_DOWNLOADED_SUCCESS, delegate);
+                          [timer invalidate];
+                      } else {
+                          NSLog(@"%@", error);
+                          ODRLoader::odrLoadingCompleted(request, ODR_DOWNLOADED_ERROR, delegate);
+                          [timer invalidate];
                       }
-                      
-                      ODRNotificationBody * odrNotificationBody = new ODRNotificationBody(false, tags);
-                      
-                      cocos2d::EventCustom event(ODR_NOTIFICATION);
-                      event.setUserData(odrNotificationBody);
-                      cocos2d::Director::getInstance()->getEventDispatcher()->dispatchEvent(&event);
-                  } else {
-                      std::vector<std::string> tags;
-                      for (NSString * tag : [request tags]) {
-                          tags.push_back(std::string([tag UTF8String]));
-                      }
-                      
-                      ODRNotificationBody * odrNotificationBody = new ODRNotificationBody(true, tags);
-                      
-                      cocos2d::EventCustom event(ODR_NOTIFICATION);
-                      event.setUserData(odrNotificationBody);
-                      cocos2d::Director::getInstance()->getEventDispatcher()->dispatchEvent(&event);
-                  }
-              }];
+                  }];
+             });
          }
      }];
     
-    return request;
-    
 }
 
-int ODRLoader::getPercent(void * request) {
-    NSBundleResourceRequest * r = (NSBundleResourceRequest *)request;
-    return [r progress].fractionCompleted * 100;
+
+
+void ODRLoader::odrLoadingCompleted(void * request, int result, ODRLoaderDelegate * delegate) {
+    if (delegate != nullptr) {
+        NSBundleResourceRequest * r = (NSBundleResourceRequest *)request;
+        std::vector<std::string> tags;
+        for (NSString * tag : [r tags]) {
+            tags.push_back(std::string([tag UTF8String]));
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            delegate->odrLoadingCompleted(tags, result);
+        });
+        
+    }
+    
 }

@@ -9,27 +9,24 @@
 #ifndef ODRLoader_h
 #define ODRLoader_h
 
-#define ODR_NOTIFICATION "ODR_NOTIFICATION"
+#define ODR_ALREADY_DOWNLOADED    0
+#define ODR_DOWNLOADED_ERROR      1
+#define ODR_DOWNLOADED_SUCCESS    2
 
 #include <string>
 #include <vector>
 
-struct ODRNotificationBody {
-    ODRNotificationBody(bool ok, std::vector<std::string> tags) {
-        this->ok = ok;
-        this->tags = tags;
-    }
-    
-    bool ok;
-    std::vector<std::string> tags;
-    
+class ODRLoaderDelegate {
+public:
+    virtual void odrLoadingCompleted(std::vector<std::string> tags, int result) = 0;
+    virtual void odrLoadingStatus(std::vector<std::string> tags, float status) = 0;
 };
 
-class ODRLoader  {
+class ODRLoader {
+private:
+    static void odrLoadingCompleted(void * request, int result, ODRLoaderDelegate * delegate);
 public:
-    static void * loadWithTag(std::vector<std::string> tags);
-    static int getPercent(void * request);
-
+    static void loadWithTags(std::vector<std::string> tags, ODRLoaderDelegate * delegate);
 };
 
 #endif /* ODRLoader_h */
